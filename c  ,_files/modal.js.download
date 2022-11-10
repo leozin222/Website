@@ -1,0 +1,317 @@
+$(function(){
+    Modal.init();
+    Modal.parentMessage('setTheme', {});
+});
+
+function pushDataLayer(dataObject) {
+    window.dataLayer.push(dataObject);
+}
+
+function feedbackChoose(feedback){
+    var dataObject = {
+        event: 'ga.events.feedback',
+        eventCategory: 'Atendimento Menu Ajuda',
+        eventTopic: Modal.topic,
+        eventQuestion: Modal.question,
+        eventFeedback: feedback
+    }
+    pushDataLayer(dataObject);
+}
+
+const Modal = {
+    parentForm: '',
+    token: '',
+    theme: '#fff',
+    themeText: '#fff',
+    init: () => {
+        const modalStylesConfig = {
+            'border': 'none',
+            'z-index': 2147483999,
+            'height': '100%',
+            'width': '100%',
+            'display': 'none',
+            'pointer-events': 'auto',
+            'touch-action': 'auto',
+            'position': 'fixed',
+            'top': '0',
+            'visibility': 'visible',
+        }
+
+        Modal.parentMessage('load', modalStylesConfig);
+        Modal.events();
+    },
+    setTheme: (theme) => {
+        if(theme === 'A') {
+            $('.modal-footer').addClass('dark');
+            $('.btn-light').addClass('dark');
+            $('.btn-light2').addClass('dark2');
+            $('.feedback-div').addClass('dark');
+            $('.modal-header').addClass('dark');
+            $('.close').addClass('dark');
+            $('.card-default').addClass('dark');
+            $('.modal-content').addClass('dark');
+            $('.form-control').addClass('dark');
+            $('label').addClass('dark');
+            $('.btn-send-form-template').addClass('dark');
+            Modal.theme = '#232321';
+            Modal.themeText = '#fff';
+        }
+        else {
+            $('.modal-footer').removeClass('dark');
+            $('.btn-light').removeClass('dark');
+            $('.btn-light2').removeClass('dark2');
+            $('.feedback-div').removeClass('dark');
+            $('.modal-header').removeClass('dark');
+            $('.close').removeClass('dark');
+            $('.card-default').removeClass('dark');
+            $('.modal-content').removeClass('dark');
+            $('.form-control').removeClass('dark');
+            $('label').removeClass('dark');
+            $('.btn-send-form-template').removeClass('dark');
+            Modal.theme = '#fff';
+            Modal.themeText = '#212529';
+        }
+    },
+    ajax: data => {
+        Swal.close();
+        return new Promise((resolve, reject) => {
+            $.ajax({
+                type: "post",
+                url: `${baseURL()}/template`,
+                data: data,
+                dataType: 'json',
+                crossDomain: true,
+                beforeSend: function (xhr) {
+                    Swal.fire({
+                        background: Modal.theme,
+                        icon: 'info',
+                        title: `<h5 style="color: ${Modal.themeText}">Processando...</h5>`,
+                        html: `<h6 style="color: ${Modal.themeText}">Por favor, aguarde.</h6>`,
+                        allowEscapeKey: false,
+                        allowEnterKey: false,
+                        didOpen: () =>{ Swal.showLoading()}
+                    });
+                    xhr.setRequestHeader('Authorization', 'Bearer ' + Modal.token);
+                },
+                success: function(result) {
+                    return resolve(result);
+                },
+                error:function(error) {
+                    return reject(error)
+                },
+                complete:function() {
+                    Swal.close();
+                }
+            });
+        });
+    },
+    getTemplate: (selectedMenu, form = null) => {
+        $('.modal').modal('hide');
+        let serializedForm = Globals.serializeForm(form);
+        const data = (serializedForm ? serializedForm : '') + Modal.parentForm + 'menu=' + selectedMenu;
+
+        Modal.ajax(data).then(resolve => {
+            try{
+                if(resolve.no_matched && resolve.no_matched.length > 0) {
+                    const noMatched = resolve.no_matched.reduce((accumulator, field) => (accumulator == '' ? field.replace(/_/g, ' ') : `${accumulator}, ${field.replace(/_/g, ' ')}`), '');
+                    Swal.fire({
+                        background: Modal.theme,
+                        icon: 'question',
+                        html: `<h6 style="color: ${Modal.themeText}">Os campos listados abaixo não foram localizados e são necessáros para a correta formatação do texto.</h6><h6 style="color: ${Modal.themeText}">Você gostaria de informar estes dados, ou prefere seguir preenchendo o formulario?</h6><div class="warning-list">${noMatched}</div>`,
+                        allowEscapeKey: false,
+                        allowEnterKey: false,
+                        showCancelButton: true,
+                        confirmButtonText: 'Informar dados',
+                        cancelButtonText: 'Seguir no AVA',
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            Modal.formNoMatched({template: resolve.template, fields: resolve.no_matched}, selectedMenu);
+                        }
+                        else {
+                            Modal.parentMessage('dismissModal', {});
+                        }
+                    });
+                }
+                else {
+                    Modal.show(resolve, selectedMenu);
+                }
+            } catch (err){
+                console.error(err);
+                Modal.parentMessage('dismissModal', {});
+            }
+        }, reject => {
+            if(reject.responseJSON && 'bind' in reject.responseJSON) {
+                const noMatched = reject.responseJSON.bind.reduce((accumulator, field) => `${accumulator}${accumulator !== '' ? ',' : ''}${field.replace(/_/g, ' ')}`, '');
+                Swal.fire({
+                    background: Modal.theme,
+                    icon: 'question',
+                    html: `<h6 style="color: ${Modal.themeText}">Os campos abaixo não foram localizados e são necessáros para a correta formatação do texto.</h6><h6 style="color: ${Modal.themeText}">Você gostaria de informar estes dados, ou prefere seguir preenchendo os dados em tela?</h6><div class="warning-list" style="color: ${Modal.themeText}">${noMatched}</div>`,
+                    allowEscapeKey: false,
+                    allowEnterKey: false,
+                    showCancelButton: true,
+                    confirmButtonText: 'Informar dados',
+                    cancelButtonText: 'Seguir no AVA',
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        let filter = null;
+                        if(reject.responseJSON.filters) {
+                            filter = reject.responseJSON.filters;
+                        }
+                        Modal.formNoMatched({template: '', fields: reject.responseJSON.bind, filters: filter}, selectedMenu);
+                    }
+                    else {
+                        Modal.parentMessage('dismissModal', {});
+                    }
+                });
+            }
+            else {
+                Swal.fire({
+                    background: Modal.theme,
+                    icon: 'error',
+                    html: `<span style="color: ${Modal.themeText}">Não foi possível consultar os dados para esta opção de menu. Por favor, tente mais tarde</span>`,
+                    allowEscapeKey: false,
+                    allowEnterKey: false,
+                    didClose: () => {  Modal.parentMessage('dismissModal', {}) }
+                });
+            }
+        });
+    },
+    show: (data, menu) => {
+        if(data.template) {
+            $('#template-text').html(data.template);
+            setTimeout(() => $('#modalTemplate').modal('show'), 300);
+        }
+        else {
+            const fields = data.form;
+
+            if(!fields) {
+                Swal.fire({
+                    background: Modal.theme,
+                    icon: 'error',
+                    html: `<span style="color: ${Modal.themeText}">Não foi possível consultar os dados para esta opção de menu. Por favor, tente mais tarde</span>`,
+                    allowEscapeKey: false,
+                    allowEnterKey: false,
+                    didClose: () => {  Modal.parentMessage('dismissModal', {}) }
+                });
+                return;
+            }
+            let form = '<div cass="row">';
+            fields.map(field => {
+                form += `<div class="col-md-12">`;
+                form += `<label for="${field.name}">${field.label} *</label>`;
+                tooltip =  field.description ? ` data-toggle="tooltip" data-placement="bottom" title="${field.description}"` : '';
+                switch (field.type) {
+                    case 'combobox':
+                        if(field.options.length === 0) {
+                            form += `<input type="text" name="${field.name}" id="${field.name}" class="form-control" ${tooltip} required />`;
+                        }
+                        else {
+                            form += `<select name="${field.name}" id="${field.name}" class="form-control" ${tooltip} required>`;
+                            const options = field.options.reduce((accumulator, option) => (
+                                accumulator = `${accumulator}<option value="${option[field.option_key]}">${option[field.option_name]}</option>`
+                            ), '');
+                            form += `${options}</select>`;
+                        }
+                        break;
+                    case 'texto longo':
+                        form += `<textarea name="${field.name}" id="${field.name}" class="form-control" ${tooltip} required></textarea>`;
+                        break;
+                    case 'texto':
+                        form += `<input type="text" name="${field.name}" id="${field.name}" class="form-control" ${tooltip} required />`;
+                        break;
+                    case 'input texto':
+                        form += `<input type="text" name="${field.name}" id="${field.name}" class="form-control" ${tooltip} required />`;
+                        break;
+                    case 'data':
+                        form += `<input type="date" name="${field.name}" id="${field.name}" class="form-control" ${tooltip} required/>`;
+                        break;
+                    case 'numerico':
+                        form += `<input type="number" name="${field.name}" id="${field.name}" class="form-control" ${tooltip} required/>`;
+                        break;
+                
+                    default:
+                        form += `<textarea name="${field.name}" id="${field.name}" class="form-control" ${tooltip} required></textarea>`;
+                        break;
+                }
+                form += `</div>`;
+            });
+            form += '<div class="col-md-12"><input type="hidden" name="post_form" value="true"/><span id="attention-message"><strong>* Campos obrigatórios</strong></span></div>';
+            form += '</div>';
+            $('#form-template').data('menu', menu);
+            $('#form-template').html(form);
+            $('[data-toggle="tooltip"]').tooltip()
+            setTimeout(() => { $('#modalForm').modal('show') }, 600);
+        }
+    },
+    events: () => {
+        $('#modalTemplate').on('hide.bs.modal', function() {
+            Modal.parentMessage('dismissModal', {});
+        });
+        $('.btn-close-modal, .close').on('click', function() {
+            Modal.parentMessage('dismissModal', {});
+        });
+
+        $('#form-filter').on('submit', function(event) {
+            event.preventDefault();
+            Modal.getTemplate($('#form-template').data('menu'), '#form-filter');
+        })
+    },
+    formNoMatched: (fields, menu = '') => {
+        let form = '<div class="row">';
+        let dark = (Modal.theme == '#fff' ? '' : 'dark');
+        fields.fields.map(field => {
+            let label = field.replace('_', ' ');
+            form += `<div class="col-md-12"><label class="${dark}" for="${field}">${label}*</label><input type="text" name="${field}" class="form-control ${dark}" data-toggle="tooltip" data-placement="bottom" title="Informe o ${label}" required/></div>`;
+        });
+        form += '<div class="col-md-12"><input type="hidden" name="post_form" value="true"/></div>';
+        if(fields.template != '') {
+            form += `<textarea name="template" style="display: none;">${fields.template}</textarea>`;
+        }
+        if(fields.filters) {
+            form += `<input name="filters" style="display: none;" value="${fields.filters}" />`;
+        }
+        form += '</div>';
+        $('#form-template').data('menu', menu);
+        $('#form-template').html(form);
+        $('[data-toggle="tooltip"]').tooltip()
+        setTimeout(() => { $('#modalForm').modal('show') }, 600);
+    },
+    sendMessage: (context, action, data, element) => {
+        context.postMessage({
+            action: action,
+            element: element,
+            data: data
+        }, '*')
+    },
+    parentMessage: (action, data) => {
+        window.parent.postMessage({
+            action: action,
+            element: 'modal',
+            data: data
+        }, '*')
+    },
+}
+
+window.addEventListener('message', event => {
+    const data = event.data;
+    Swal.close();
+    if(!data || !data.action) {
+        return;
+    }
+
+    switch (data.action) {
+        case 'showTemplate':
+            Modal.parentForm = data.form;
+            Modal.token = data.token;
+            Modal.getTemplate(data.selectedMenu);
+            Modal.topic = data.menuDesc
+            Modal.question = data.menuLabel
+            break;
+        case 'theme':
+            Modal.setTheme(event.data.theme);
+            break;
+        default:
+            Modal.parentMessage('dismissModal', {});
+            break;
+    }
+});

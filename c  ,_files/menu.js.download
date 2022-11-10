@@ -1,0 +1,256 @@
+$(function(){
+    Menu.init();
+    Menu.parentMessage('setTheme', {});
+});
+
+function pushDataLayer(dataObject) {
+    window.dataLayer.push(dataObject);
+}
+
+function pushMenuDataLayer(title, subtitle = false)
+{
+    var dataObject = {
+        event: 'ga.events',
+        eventTopic: title
+    }
+
+    if(subtitle){
+        dataObject.eventQuestion = subtitle;
+    }
+    else{
+        dataObject.eventQuestion = "";
+    }
+    pushDataLayer(dataObject);
+}
+
+const Menu = {
+    url: '',
+    token: '',
+    modality: '',
+    init: () => {
+        return new Promise(resolve => {
+            let menuStylesConfig = {
+                'z-index': 999,
+                'min-height': '120px',
+                'width': '240px',
+                'pointer-events': 'auto',
+                'touch-action': 'auto',
+                'position': 'fixed',
+                'top': '140px',
+                'right': '1px',
+                'visibility': 'visible',
+                'border': '1px solid rgb(199, 199, 199)',
+                'border-radius': '5px',
+                'transform': 'translateX(130%)',
+                'box-shadow': 'rgb((113 113 113 / 70%) 0px 0px 10px 0px',
+            }
+            
+            Menu.parentMessage('load', menuStylesConfig);
+            // Menu.getMenu();
+            resolve(true);
+        });
+    },
+    setTheme: (theme) => {
+        $("head").find("#light-theme").remove();
+        $("head").find("#dark-theme").remove();
+        if(theme === 'A') {
+            $("head").append("<link id='dark-theme' href='menu_dark.css' type='text/css' rel='stylesheet' />");
+        }
+        else {
+            $("head").append("<link id='light-theme' href='menu.css' type='text/css' rel='stylesheet' />");
+        }
+    },
+    setOptions: (url, options) => {
+        return new Promise((resolve, reject) =>{
+            const list = localStorage.getItem('MenuAtendimento[listaMenu]');
+            if(list == undefined || list == null || list.length == 0) {
+                const store = JSON.stringify([{ url: url, list: options, time: new Date().getTime() }]);
+                localStorage.setItem('MenuAtendimento[listaMenu]', store);
+                return resolve(true);
+            }
+            const menuData = JSON.parse(list);
+            const index = menuData.findIndex((data) => data.url === url );
+            if(index === -1) {
+                menuData.push({ url: url, list: options, time: new Date().getTime() });
+                localStorage.setItem('MenuAtendimento[listaMenu]', JSON.stringify(menuData));
+            }
+            return resolve(true);
+        })
+    },
+    getOptions: () => {
+        
+        return new Promise((resolve, reject) =>{
+            const list = localStorage.getItem('MenuAtendimento[listaMenu]');
+            if(list == undefined || list == null || list.length == 0) {
+                return resolve(true);
+            }
+            const menuData = JSON.parse(list);
+            const index = menuData.findIndex((data) => data.url == Menu.url );
+            if(index === -1) {
+                return resolve(true);
+            }
+            const menu = menuData[index];
+            const time = new Date().getTime() - menu.time;
+            if(new Date(time).getMinutes() > 1) {
+                menuData.splice(index, 1);
+                localStorage.setItem('MenuAtendimento[listaMenu]', JSON.stringify(menuData));
+                return resolve(true);
+            }
+            return resolve(menuData[index].list);
+        })
+    },
+    getMenu: () => {
+        return new Promise((resolve, reject) => {
+            $('#menu-body').html(
+                '<div class="menu"><span class="loading"></span><span class="loading"></span><span class="loading"></span><span class="loading"></span></div>'
+            );
+            if(Menu.url == '') {
+                return;
+            }
+            Menu.getOptions(Menu.url).then((listOptions) => {
+                if(listOptions !== true) {
+                    const htmlMenu = Menu.menuFactory(listOptions);
+                    $('#menu-body').html(htmlMenu);
+                    return resolve(true);
+                }
+
+
+                $.ajax({
+                    type: "post",
+                    url: `${baseURL()}/tree`,
+                    data: { url: Menu.url, modality: Menu.modality },
+                    dataType: 'json',
+                    crossDomain: true,
+                    beforeSend: function (xhr) {
+                        xhr.setRequestHeader('Authorization', 'Bearer ' + Menu.token);
+                    },
+                    success: function(result) {
+                        if(result.message) {
+                            $('#menu-body').html('<div class="error-menu"><h5>' + result.message + '</h5></div>');
+                        }
+                        Menu.setOptions(Menu.url, result).then(function() {
+                            const htmlMenu = Menu.menuFactory(result);
+                            $('#menu-body').html(htmlMenu);
+                            resolve(true);
+                        });
+                    },
+                    error:function(error) {
+                        $('#menu-body').html(
+                            '<div class="menu">\
+                                <div class="error-menu">\
+                                    <h5 class="error-message">Falha ao tentar carregar os menus.</h5>\
+                                    <button type="button" id="button-reload-menu"><i class="fas fa-redo-alt"></i></button>\
+                                </div>\
+                            </div>'
+                        );
+                        reject(error);
+                    }
+                });
+            }, error => {
+                console.log(error);
+            })
+
+        }, error => {
+            console.log(error);
+        });
+    },
+    menuFactory: (jsonMenu, parent = null) => {
+        let htmlMenu     = '<div class="menu">';
+        if(parent) {
+            htmlMenu     = '<div class="menu submenu">';
+            htmlMenu     = `${htmlMenu}
+                            <label class="menu-toggle" for="${parent.action}">
+                                <i class="fas fa-chevron-left icon"></i>
+                                <span>${parent.label}</span>
+                            </label>`;
+        }
+        htmlMenu = `${htmlMenu} <ul>`;
+
+        if (typeof jsonMenu === 'object' && jsonMenu.length >= 0) {
+            jsonMenu.map(menu => {
+                if(menu.submenu && menu.submenu.length > 0) {
+                    htmlMenu = `${htmlMenu}<li>
+                        <label onclick="pushMenuDataLayer('${menu.label}');" for="${menu.action}">
+                            <span>${menu.label}</span>
+                            <i class="fas fa-chevron-right icon pull-right"></i>
+                        </label>
+                        <input type="checkbox" id="${menu.action}" name="${menu.action}" class="menu-checkbox">`;
+
+                    htmlMenu += Menu.menuFactory(menu.submenu, menu);
+                    htmlMenu += '</li>';
+                }
+                else {
+                    try{
+                        htmlMenu = `${htmlMenu} <li><a onclick="pushMenuDataLayer('${parent.label}', '${menu.label}');" class="show-template" data-label="${parent.label}" data-action="${menu.action}" href="#">${menu.label}</a></li>`;
+                    }
+                    catch{
+                        htmlMenu = `${htmlMenu} <li><a onclick="pushMenuDataLayer('', '${menu.label}');" class="show-template" data-label="null" data-action="${menu.action}" href="#">${menu.label}</a></li>`;
+                    }
+                }
+            });
+        }
+
+        htmlMenu = `${htmlMenu} </ul> </div>`;
+
+        return htmlMenu;
+        
+    },
+    sendMessage: (context, action, element, data) => {
+        context.postMessage({
+            action: action,
+            element: element,
+            data: data
+        }, '*')
+    },
+    parentMessage: (action, data) => {
+        window.parent.postMessage({
+            action: action,
+            element: 'menu',
+            data: data
+        }, '*');
+    }
+}
+
+$(document).on('click', '#close-menu', function() {
+    const hide = {
+        'transition': '0.25s',
+        'transition-timing-function': 'ease-out',
+        'transform': 'translateX(130%)',
+    }
+    $('.menu-checkbox').prop('checked', false);
+    Menu.parentMessage('load', hide);
+});
+$(document).on('click', '.show-template', function() {
+    Menu.sendMessage(window.parent, 'message', 'modal', {
+        action: 'showTemplate',
+        selectedMenu: $(this).data('action'),
+        menuDesc: $(this).data('label'),
+        menuLabel: $(this).html()
+    });
+});
+$(document).on('click', '#button-reload-menu', function(){
+    Menu.getMenu();
+})
+
+window.addEventListener('message', event => {
+    if (event && event.data) {
+        if(event.data.menu) {
+            Menu.url = event.data.url;
+            Menu.token = event.data.token;
+            Menu.modality = event.data.modality;
+            // Menu.init();
+            Menu.getMenu();
+        }
+        else if(event.data.theme) {
+            Menu.setTheme(event.data.theme);
+        }
+        else {
+            const msg = event.data;
+            if (typeof msg !== 'undefined' && msg && msg.data) {
+                msg.data.height = '400px';
+                msg.data['max-height'] = 'calc(100vh - 168px)';
+                Menu.parentMessage('load', msg.data);
+            }
+        }
+    }
+});

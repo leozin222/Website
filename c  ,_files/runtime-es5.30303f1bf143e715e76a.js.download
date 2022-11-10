@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-br">
+    <head>
+        <script>
+        window.dataLayer = window.dataLayer || [];
+        </script>
+        <!-- Google Tag Manager -->
+        <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+        new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+        j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+        'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+        })(window,document,'script','dataLayer','GTM-T9HM7HM');</script>
+        <!-- End Google Tag Manager -->
+        <meta charset="utf-8">
+        <title>AVA</title>
+        <base href="/">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" type="image/x-icon" href="./favicon.ico">
+        <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500&amp;display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+        <link rel="manifest" href="manifest.webmanifest">
+        <meta name="theme-color" content="#1976d2">
+        <meta http-equiv="cache-control" content="no-cache, must-revalidate, post-check=0, pre-check=0">
+        <meta http-equiv="expires" content="0">
+        <meta http-equiv="pragma" content="no-cache">
+<link rel="stylesheet" href="styles.bb6702a9d1aa43d9ff5c.css"></head>
+    <body>
+        <!-- Google Tag Manager (noscript) -->
+        <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T9HM7HM"
+        height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+        <!-- End Google Tag Manager (noscript) -->
+        
+        <app-root></app-root>
+
+        <script src="https://unpkg.com/ionicons@5.0.0/dist/ionicons.js"></script>
+      <noscript>Please enable JavaScript to continue using this application.</noscript>
+<script src="runtime-es2015.1f212c5c007f24482aa0.js" type="module"></script><script src="runtime-es5.1f212c5c007f24482aa0.js" nomodule defer></script><script src="polyfills-es5.44aa551767661f188591.js" nomodule defer></script><script src="polyfills-es2015.b6ae772f418e0d0e1fad.js" type="module"></script><script src="scripts.a3d5f0a26d5e953c3501.js" defer></script><script src="main-es2015.4a78d19ddc23f67f3917.js" type="module"></script><script src="main-es5.4a78d19ddc23f67f3917.js" nomodule defer></script></body>
+</html>

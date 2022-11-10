@@ -1,0 +1,43 @@
+function baseURL() {
+    let domain = (window.location.host.includes('local') ? 'uniasselvi.local' : (window.location.host.includes('net') ? 'asselvi.net.br' : (window.location.host.includes('preprod') ? 'preproduniasselvi.com.br' :  'uniasselvi.com.br')));
+    return `https://api-menuatendimento.${domain}/v1/api`;
+}
+
+const Globals = {
+    serializeForm: (form = null) => {
+        let fields = '';
+
+        try {
+            if(!form) {
+                return '';
+            }
+            const formModal = new FormData(document.querySelector(form));
+            if(!formModal) {
+                return '';
+            }
+            for(let v of formModal.entries()) {
+                if((/(\d{4})-(\d{2})-(\d{2})/g).test(v[1])) {
+                    const data = v[1].replace(/(\d{4})-(\d{2})-(\d{2})/g, '$3/$2/$1');
+                    fields = `${fields}${v[0]}=${data}&`;
+                }
+                else {
+                    fields = `${fields}${v[0]}=${v[1]}&`;
+                }
+            }
+            return fields;
+        } catch(err) {
+            console.log(err);
+            Swal.fire({
+                icon: 'error',
+                text: 'Não foi possível processar sua requisição',
+                allowEscapeKey: false,
+                allowEnterKey: false,
+                didClose: () => {  Modal.parentMessage('dismiss-modal', {}) }
+            })
+        }
+    },
+    token: () => {
+        const session = JSON.parse(localStorage.getItem('MenuAtendimento:userAVA'));
+        return session.token;
+    }
+}

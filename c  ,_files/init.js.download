@@ -1,0 +1,421 @@
+URLMENUENVIRNMENT = 'uniasselvi.local';
+
+if(window.location.host.includes('net')) {
+    URLMENUENVIRNMENT = 'asselvi.net.br';
+}
+else if(window.location.host.includes('preprod')) {
+    URLMENUENVIRNMENT = 'preproduniasselvi.com.br';
+}
+else if(window.location.host.includes('com.br')) {
+    URLMENUENVIRNMENT = 'uniasselvi.com.br';
+}
+
+Widget = {
+    config: {},
+    countTry: 0,
+    setConfig: (config) => {
+        Widget.config = config;
+    },
+    getConfig: () => {
+        return Widget.config;
+    },
+    setToken: (token) => {
+        if(token == null || token == undefined || token == '') {
+            localStorage.removeItem('MenuAtendimento[userAVA]');
+            return;
+        }
+        const jsonToken = JSON.stringify({
+            token: token,
+            time: new Date().getTime()
+        });
+        localStorage.setItem('MenuAtendimento[userAVA]', jsonToken);
+    },
+    getToken: (cb) => {
+            const stored = localStorage.getItem('MenuAtendimento[userAVA]');
+            if(!stored || stored == null || stored === '') {
+                return cb('');
+            }
+
+            const tokenData = JSON.parse(stored);
+            const time = new Date().getTime() - tokenData.time;
+
+            if(new Date(time).getMinutes() >= 5) {
+                Widget.setToken('');
+                return cb('');
+            }
+            else if(!tokenData.token){
+                return cb('');
+            }
+            return cb(tokenData.token);
+    },
+    setShowComponent: (url, show = false) => {
+        const storage = JSON.parse(localStorage.getItem('MenuAtendimento[urlAVA]'));
+        const menuTemplateUrl = typeof url == 'undefined' ? window.location.href : url;
+        if(!storage) {
+            const store = JSON.stringify({ time: new Date().getTime(), url: [{ url: menuTemplateUrl, show: show }] });
+            localStorage.setItem('MenuAtendimento[urlAVA]', store);
+        }
+        else {
+            if(storage.url.findIndex(url => url === menuTemplateUrl) === -1) {
+                storage.url.push({ url: menuTemplateUrl, show: show });
+            }
+            localStorage.setItem('MenuAtendimento[urlAVA]', JSON.stringify(storage));
+        }
+    },
+    getShowComponent: (url) => {
+        if(!localStorage.getItem('MenuAtendimento[urlAVA]')) {
+            return null;
+        }
+        const storage = JSON.parse(localStorage.getItem('MenuAtendimento[urlAVA]'));
+        const time = new Date().getTime() - storage.time;
+
+        if(new Date(time).getMinutes() >= 1) {
+            localStorage.removeItem('MenuAtendimento[urlAVA]');
+            return null;
+        }
+        else {
+            const urlTest = (typeof url != 'undefined' ? url : window.location.href);
+            const location = storage.url.filter(url => url.url === urlTest);
+            if(location === null || location.length === 0) {
+                return null;
+            }
+            return location[0].show;
+        }
+    },
+    init: (config) => {
+        try {
+            if(!config.espe_codi || config.espe_codi == '') {
+                throw new Error("O parâmetro espe_codi é obrigatório");
+            }
+
+            Widget.setConfig(config);
+            Widget.login().then(result => {
+                Widget.inicializeComponent(),
+                error => console.error(error)
+            });
+        } catch(e) {
+            return e.message;
+        }
+    },
+    login: () => {
+        return new Promise((resolve, reject) => {
+            try {
+                Widget.getToken(function(token) {
+                    if(token !== '') {
+                        return resolve(token);
+                    }
+                    const { espe_codi } = Widget.getConfig();
+                    
+                    $.ajax({
+                        type: "post",
+                        url: `https://www.${URLMENUENVIRNMENT}/extranet/o-2.0/paginas/atendimento/chat/index.php`,
+                        data: { type: 'login', espe_codi },
+                        dataType: 'json',
+                        crossDomain: true,
+                        success: function(result) {
+                            if(result.message) {
+                                reject(result);
+                            }
+                            Widget.setToken(result.token);
+                            resolve(result.token);
+                        },
+                        error: function() {
+                            reject(false);
+                        }
+                    });
+                });
+
+            } catch(err) {
+                console.error(err);
+                reject(err);
+            }
+        });
+    },
+    inicializeComponent: (url) => {
+
+        Components.render(function() {
+            Components.hide();
+            const showConponent = Widget.getShowComponent(url);
+
+            if(showConponent === false) {
+                return;
+            }
+            else if(showConponent === true) {
+                Components.show(url);
+                return;
+            }
+
+            Widget.verifyShowComponent(url);
+        });
+
+
+    },
+    verifyShowComponent(url) {
+
+        if(!url) {
+            url = window.location.href;
+        }
+        
+        Widget.login().then(token => {
+            let config = Widget.getConfig();
+
+            $.ajax({
+                type: "post",
+                url: `https://api-menuatendimento.${URLMENUENVIRNMENT}/v1/api/show`,
+                data: { url, modality: config.form?.modality },
+                dataType: 'json',
+                crossDomain: true,
+                beforeSend: function (xhr) {
+                    xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+                },
+                success: function(result) {
+                    Widget.setShowComponent(url, result.show_component);
+                    if(result.show_component) {
+                        const theme =  (Widget.getConfig().theme != undefined ? Widget.getConfig().theme : 'B');
+                        Events.handle({ element: 'menu', action: 'reloadMenu', theme: theme });
+                        Components.show(url);
+                    }
+                    else {
+                        Components.hide();
+                    }
+                },
+                error: function(result) {
+                    if(typeof Widget.countTry != 'undefined') {
+                        Widget.countTry++;
+                    }
+                    else {
+                        Widget.countTry = 1;
+                    }
+                    
+                    if(Widget.countTry == 3) {
+                        Widget.countTry = 0;
+                        Widget.setToken();
+                        Components.hide();
+                        return;
+                    }
+    
+                    return Widget.login().then(result => {
+                        Widget.inicializeComponent(url),
+                        error => console.log(error)
+                    });
+                }
+            });
+        });
+    },
+    serializeForm: (form) => {
+        try {
+            let fields = '';
+            for(let v of Object.keys(form)) {
+                if((/(\d{4})-(\d{2})-(\d{2})/g).test(form[v])) {
+                    const data = form[v].replace(/(\d{4})-(\d{2})-(\d{2})/g, '$3/$2/$1');
+                    fields = `${fields}${form[v]}=${data}&`;
+                }
+                else {
+                    fields = `${fields}${v}=${form[v]}&`;
+                }
+            }
+
+            const parentWindowForms = window.parent.document.querySelectorAll('form');
+            if(!parentWindowForms || parentWindowForms == '') {
+                return fields;
+            }
+            for(const f of parentWindowForms) {
+                const formData = new FormData(f);
+                for(let v of formData.entries()) {
+                    if(v[1] == '') {
+                        continue;
+                    }
+                    if((/(\d{4})-(\d{2})-(\d{2})/g).test(v[1])) {
+                        const data = v[1].replace(/(\d{4})-(\d{2})-(\d{2})/g, '$3/$2/$1');
+                        fields = `${fields}${v[0]}=${data}&`;
+                    }
+                    else {
+                        fields = `${fields}${v[0]}=${v[1]}&`;
+                    }
+                }
+            }
+            return fields;
+        } catch(err) {
+            console.log(err);
+            return '';
+        }
+    },
+}
+
+const Components = {
+    launch: `iframeLaunch${new Date().getTime()}`,
+    menu: `iframeMenu${new Date().getTime()}`,
+    modal: `iframeModal${new Date().getTime()}`,
+
+    getParent: (component) => {
+        const element = Components[component];
+        if(!element) { return false; }
+        return window.parent.document.getElementById(element);
+    },
+    get: (component) => {
+        const element = Components[component];
+        if(!element) { return false; }
+        return document.getElementById(element);
+    },
+    render: (cb) => {
+
+        const la = document.createElement("iframe");
+        const me = document.createElement("iframe");
+        const mo = document.createElement("iframe");
+
+        if( Components.getParent('launch') ) {
+            /* Se já estiver uma instância do iframe não cria outra */
+            la.style.display = 'none';
+            return cb(true);
+        }
+        var launchStyles = {};
+        let styles = '';
+    
+        la.id = Components.launch,
+        la.classList.add("menu-template-widget"),
+        la.classList.add("menu-template-launch"),
+        la.src = `https://www.${URLMENUENVIRNMENT}/include_share-2.0/menu_atendimento_ava/pages/launch/launch.html`;
+        for (var key in launchStyles) { styles += key + ': ' + launchStyles[key] + ';'; }
+        la.setAttribute('style', styles + 'border: none; height: 0; display: none;');
+
+        me.id = Components.menu,
+        me.classList.add("menu-template-widget"),
+        me.src = `https://www.${URLMENUENVIRNMENT}/include_share-2.0/menu_atendimento_ava/pages/menu/menu.html`;
+        me.setAttribute('style', 'border: none; height: 0');
+    
+        mo.id = Components.modal,
+        mo.classList.add("menu-template-widget"),
+        mo.src = `https://www.${URLMENUENVIRNMENT}/include_share-2.0/menu_atendimento_ava/pages/modal/modal.html`;
+        mo.setAttribute('style', 'border: none; height: 0');
+    
+        document.body.appendChild(la);
+        document.body.appendChild(me);
+        document.body.appendChild(mo);
+
+        return cb(true);
+
+    },
+    show: (url) => {
+        const la = Components.getParent('launch');
+        setTimeout(() => {
+            Events.handle({action: 'getMenu', element: 'menu', data: {url: ( !url ? window.location.href : url ) }} );
+        }, 300);
+        if(la.style.display == 'none') {
+            const defaultStyles = { 'display': 'flex' };
+            Events.handle({action: 'load', element: 'launch', data: defaultStyles})
+        }
+        la.style.display = 'flex!important;';
+    },
+    hide: () => {
+        const la = Components.getParent('launch');
+        la.style.display = 'none';
+    }
+};
+
+const Events = {
+    handle: (evt) => {
+
+        const targetWindow = Components.get(evt.element).contentWindow;
+        const element = Components.get(evt.element);
+
+        if(!Events[evt.action]) {
+            return;
+        }
+
+        return Events[evt.action](evt.data, targetWindow, element);
+    },
+    load: (data, targetWindow, element) => {
+        const style = data;
+        for (var key in style) {
+            if (typeof element !== 'undefined' && element && element.style) {
+                element.style[key] = style[key];
+            }
+        }
+    },
+    setTheme: (data, targetWindow, element) => {
+        if(data.theme) {
+
+            const config = Object.assign(Widget.getConfig(), { theme: data.theme });
+            Widget.setConfig(config);
+
+            if( ['launch', 'menu'].map(elem => (element.id).toLocaleLowerCase().includes(elem)) ) {
+                if(data.theme === 'A') {
+                    window.parent.document.getElementById(element.id).style.boxShadow = 'rgb(255 255 255 / 55%) 0px 1px 5px 0px';
+                }
+                else {
+                    window.parent.document.getElementById(element.id).style.boxShadow = 'rgb(163 159 159 / 55%) 0px 1px 5px 0px';
+                }
+            }
+        }
+        targetWindow.postMessage({action: 'theme', theme: Widget.getConfig().theme}, '*');
+    },
+    reloadMenu: (data, targetWindow, element) => {
+        targetWindow.postMessage('load', '*');
+    },
+    resize: (data, targetWindow, element) => {
+        let iframeElement = document.getElementById("iframe");
+        if (typeof iframeElement !== 'undefined' && iframeElement && iframeElement.style) {
+            iframeElement.style.width = `${data.width + iframeElement.offsetWidth}px`;
+        }
+    },
+    launch: (data, targetWindow, element) => {
+        if (typeof element !== 'undefined' && element && element.style){
+            element.style.display = 'none';
+        }
+    },
+    showModal: (data, targetWindow, element) => {
+        if((typeof element !== 'undefined' && element && element.style) && element.style.display == 'none') {
+            element.style.display = 'flex';
+            targetWindow.postMessage('modal', '*');
+        }
+    },
+    dismissModal: (data, targetWindow, element) => {
+        if (typeof element !== 'undefined' && element && element.style) element.style.display = 'none';
+    },
+    message: (data, targetWindow, element) => {
+        if (typeof element !== 'undefined' && element && element.style) {
+            element.style.display = 'flex';
+        }
+        Widget.login().then(token => {
+            data = Object.assign(data, {
+                token: token,
+                form: Widget.serializeForm(Widget.getConfig().form)
+            });
+            Components.get('modal').contentWindow.postMessage(data, '*');
+        });
+    },
+    init: (data, targetWindow, element) => {
+        Widget.login().then(token => {
+            targetWindow.postMessage({ token: token } , '*');
+        });
+    },
+    getMenu: (data, targetWindow, element) => {
+        Widget.login().then(token => {
+            let config = Widget.getConfig();
+            targetWindow.postMessage({menu: true, token: token, url: data.url, modality: config.form?.modality } , '*');
+        });
+    },
+    render: (data, targetWindow, element) => {
+        const menuElement = Components.get('menu');
+        const launch = Components.get('launch');
+        const hideMenu = {
+            'transition': '0.25s',
+            'transition-timing-function': 'ease-out',
+            'transform': 'translateX(130%)',
+        }
+        for (var key in hideMenu) {
+            if (typeof menuElement !== 'undefined' && menuElement && menuElement.style) {
+                menuElement.style[key] = hideMenu[key];
+            }
+        }
+        const url = ( typeof data.url != 'undefined' ? data.url : '' );
+        launch.contentWindow.postMessage({action: 'render'}, '*')
+        Widget.inicializeComponent(url);
+    }
+}
+window.onmessage = e => {
+    const event = e.data;
+    if(typeof event !== 'undefined' && event && event.action && event.element) {
+        Events.handle(event);
+    } else return;
+};

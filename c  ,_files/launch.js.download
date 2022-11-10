@@ -1,0 +1,177 @@
+$(document).ready(function() {
+    sendPostMessage(window.parent, 'setTheme', 'launch', {});
+})
+
+function pushDataLayer(dataObject) {
+    window.dataLayer.push(dataObject);
+}
+
+function pushMenuDataLayer()
+{
+    var dataObject = {
+        event: 'ga.events',
+        eventCategory: "Atendimento Menu",
+        eventTopic: "",
+        eventQuestion: ""
+    }
+    pushDataLayer(dataObject);
+}
+
+const Elements = {};
+
+const Launch = {
+    intervalAnimation: '',
+    init: (theme) => {
+        const styleAnimated = {
+            "border": "none",
+            "height": "66px",
+            "z-index": "997",
+            "width": "85px",
+            "visibility": "visible",
+            "opacity": "1",
+            "pointer-events": "auto",
+            "touch-action": "auto",
+            "position": "fixed",
+            "right": "2px",
+            "top": "135px",
+        }
+        sendPostMessage(window.parent, 'load', 'launch', styleAnimated);
+
+        Launch.events();
+    },
+    animation: (animate) => {
+        let element = document.querySelector('#launch');
+        if(Launch.intervalAnimation !== '') {
+            clearInterval(Launch.intervalAnimation);
+        }
+        if(!animate) {
+            return;
+        }
+        if(!['animated'].includes(document.querySelector('#launch').getAttribute('class'))) {
+            console.log('animação iniciada');
+            element.classList.add('animated');
+            Launch.intervalAnimation = setInterval(() => {
+                console.log('animando');
+                element.classList.add('animate__animated', 'animate__bounceIn');
+                
+                element.addEventListener('animationend', () => {
+                    element.setAttribute('class', '');
+                });
+            }, 10000);
+        }
+
+        Launch.events();
+    },
+    animateBook: (animate) => {
+        Launch.closeBook()
+
+        if(Launch.intervalAnimation !== '') {
+            clearInterval(Launch.intervalAnimation);
+        }
+        if(!animate) {
+            return;
+        }
+
+        Launch.intervalAnimation = setInterval(() => { Launch.openBook() }, 10000);
+    },
+    openBook: () => {
+        if(!$('#popup-message').hasClass('animate__zoomOut')) {
+            $('#popup-message').removeClass('animate__bounceIn')
+            setTimeout(() => {$('#popup-message').addClass('animate__bounceIn');}, 300)
+        }
+        else {
+            $('.book').addClass('book-open'); setTimeout(() => { $('#popup-message').removeClass('animate__zoomOut') }, 300);
+        }
+    },
+    closeBook: () => {
+        $('#popup-message').addClass('animate__zoomOut');
+        $('.book').removeClass('book-open');
+    },
+    setTheme: (theme) => {
+        $("head").find("#light-theme").remove();
+        $("head").find("#dark-theme").remove();
+        if(theme === 'A') {
+            $("head").append("<link id='dark-theme' href='launch_dark.css' type='text/css' rel='stylesheet' />");
+        }
+        else {
+            $("head").append("<link id='light-theme' href='launch.css' type='text/css' rel='stylesheet' />");
+        }
+    },
+    setFrameMenu: () => {
+        /* Seta o frame menu para comunicação entre os componentes */
+        if(typeof Elements.frameMenu == 'undefined') {
+            for(let i=0; i < window.parent.frames.length; i++) {
+                if((/menu\.html/g).test(window.parent.frames[i].location)) {
+                    Elements.frameMenu = window.parent.frames[i];
+                }
+            }
+        }
+    },
+    events: () => {
+        $('#launch').unbind('click').click(function() {
+            const show = {
+                'transform': 'translateX(0%)',
+                'transition-timing-function': 'ease-in',
+                'transition': '0.2s',
+                'height': '400px',
+            };
+            sendPostMessage(window.parent, 'load', 'menu', show);
+            pushMenuDataLayer();
+        });
+
+        $('.btn-close-animation').on('click', function(event) {
+            if($('#popup-message').hasClass('animate__zoomOut')) {
+                return;
+            }
+            Launch.setLauncher();
+            Launch.closeBook();
+            event.stopPropagation();
+        })
+    },
+    setLauncher: (launcher) => {
+        clearInterval(Launch.intervalAnimation);
+        // if(launcher === 'icon') {
+            $('.book').hide();
+            Launch.animateBook(false);
+            $('.launch-icon').show();
+            Launch.animation(true);
+        // }
+        // else {
+        //     $('.launch-icon').hide();
+        //     Launch.animation(false);
+        //     $('.book').show();
+        //     Launch.animateBook(true);
+        // }
+    }
+}
+
+const sendPostMessage = (context, action, element, data) => {
+    context.postMessage({
+        action: action,
+        element: element,
+        data: data
+    }, '*')
+}
+
+window.addEventListener('message', event => {
+    if(event.data && event.data.action) {
+        switch (event.data.action) {
+
+            case 'navigation':
+                Launch.setLauncher();
+                sendPostMessage(window.parent, 'render', 'menu', { url: event.data.url });
+                break;
+                
+            case 'theme':
+                Launch.init();
+                Launch.setLauncher();
+                Launch.setTheme(event.data.theme);
+                sendPostMessage(window.parent, 'setTheme', 'menu', { theme: event.data.theme });
+                sendPostMessage(window.parent, 'setTheme', 'modal', { theme: event.data.theme });
+                break;
+
+            default:
+                break;
+        }
+    }
+})
